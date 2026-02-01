@@ -1,5 +1,6 @@
 *.dex
 *.apk
-com/
-.idsig
-.jks
+/com/
+*.idsig
+*.jks
+*.jar
