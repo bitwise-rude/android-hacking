@@ -1,41 +1,48 @@
 #!/bin/bash
 
-$SDK_PATH = "/opt/android-sdk/build-tools"
-$BUILD_VERSION = "35.0.0"
-$PLATFORM_VERSION = "android-35"
+echo "-----Uninstalling on device-----"
+adb uninstall com.minimal.app
 
-AAPT2="$SDK_PATH/build-tools/$BUILD_TOOLS_VERSION/aapt2"
-D8="$SDK_PATH/build-tools/$BUILD_TOOLS_VERSION/d8"
-ZIPALIGN="$SDK_PATH/build-tools/$BUILD_TOOLS_VERSION/zipalign"
-APKSIGNER="$SDK_PATH/build-tools/$BUILD_TOOLS_VERSION/apksigner"
-ANDROID_JAR="requirements/android.jar"
+echo "-----Linking With AAPT2-------"
+mkdir output
+aapt2 link -o output/base.apk --manifest AndroidManifest.xml -I requirements/android.jar
 
-MANIFEST="AndroidManifest.xml"
-SRC_DIR="src" 
-OUT_DIR="build"
-GEN_DIR="gen"
-KEYSTORE="my-release-key.jks"
 
-rm -rf $OUT_DIR $GEN_DIR
-mkdir -p $OUT_DIR/obj $GEN_DIR
 
-$AAPT2 link -o $OUT_DIR/base.apk --manifest $MANIFEST -I $ANDROID_JAR
-find $SRC_DIR -name "*.java" > sources.txt
-javac -d $OUT_DIR/obj -classpath $ANDROID_JAR @sources.txt
-rm sources.txt
+echo "-----Compiling Java-------"
+mkdir obj
+javac -d obj -classpath requirements/android.jar src/com/minimal/MainActivity.java
 
-$D8 --output $OUT_DIR --lib $ANDROID_JAR $(find $OUT_DIR/obj -name "*.class")
-cd $OUT_DIR
-zip -uj base.apk classes.dex
-cd ..
 
-$ZIPALIGN -f -v 4 $OUT_DIR/base.apk $OUT_DIR/app-aligned.apk
-if [ ! -f $KEYSTORE ]; then
-    echo "Keystore not found! Generating a temporary one..."
-    keytool -genkey -v -keystore $KEYSTORE -alias my-key -keyalg RSA -keysize 2048 -validity 10000 -storepass password -keypass password -dname "CN=Example, OU=Dev, O=Dev, L=City, S=State, C=US"
+echo "-----Compiling to Dalvik-------"
+d8 --output . --lib requirements/android.jar obj/com/minimal/app/MainActivity.class
+
+
+echo "------Zipping and Aligning------"
+zip -uj output/base.apk classes.dex
+zipalign -v 4 output/base.apk output/final_app.apk
+
+
+echo "------Signing With Key------"
+if [ ! -f "signing.jks" ]; then
+    echo "Keystore not found generating"
+    keytool -genkey -v -keystore "signing.jks" -alias my-key -keyalg RSA -keysize 2048 -validity 10000 -storepass password -keypass password -dname "CN=Example, OU=Dev, O=Dev, L=City, S=State, C=US"
 fi
 
-$APKSIGNER sign --ks $KEYSTORE --ks-pass pass:password --out $OUT_DIR/final_app.apk $OUT_DIR/app-aligned.apk
+apksigner sign -ks "signing.jks" --ks-pass pass:password --out output/final_install.apk output/final_app.apk
+
+
 echo "------------------------------------"
-echo "Success! APK created at $OUT_DIR/final_app.apk"
+echo "Success! APK created at $OUT_DIR/base.apk Now Cleaning..."
+
+mv output/final_install.apk base.apk
+rm -rf output
+rm  classes.dex
+rm -rf obj
+
+echo "------------------------------------"
+echo "Installing on Android"
+
+adb install base.apk
+adb shell am start -n com.minimal.app/com.minimal.app.MainActivity
 
