@@ -11,11 +11,11 @@ aapt2 link -o output/base.apk --manifest AndroidManifest.xml -I requirements/and
 
 echo "-----Compiling Java-------"
 mkdir obj
-javac -d obj -classpath requirements/android.jar src/com/minimal/app/MainActivity.java
+javac -d obj -classpath requirements/android.jar src/com/minimal/app/*.java
 
 
 echo "-----Compiling to Dalvik-------"
-d8 --output . --lib requirements/android.jar obj/com/minimal/app/MainActivity.class
+d8 --output . --lib requirements/android.jar obj/com/minimal/app/*.class
 
 
 echo "------Zipping and Aligning------"
