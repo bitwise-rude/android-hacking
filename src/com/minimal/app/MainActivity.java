@@ -1,130 +1,200 @@
 package com.minimal.app;
 
-import android.Manifest;
 import android.app.Activity;
-import android.content.*;
-import android.content.pm.PackageManager;
-import android.graphics.*;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.*;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.*;
 
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
 
-    private static final String TARGET_SSID = "CITPC-WIFI";
-    private static final int MAX_RETRY = 3;
-
     private EditText userField, passField;
     private TextView status;
-    private boolean passwordVisible;
-
+    private Spinner userSpinner;
+    private Button addBtn, deleteBtn;
+    private boolean passwordVisible = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private List<String> userList = new ArrayList<>();
+
+    private static final String PREF_NAME = "creds";
+    private static final String KEY_USERS = "user_list";
+    private static final String KEY_LAST = "last_user";
 
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-        // Request location permission for SSID check (Android 6+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
-            }
-        }
-
+        // ─── Root layout ───
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(40,40,40,40);
+        root.setPadding(40, 40, 40, 40);
 
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0xFF0F2027,0xFF203A43,0xFF2C5364});
+                new int[]{0xFF0F2027, 0xFF203A43, 0xFF2C5364});
         root.setBackground(bg);
 
+        // ─── Card ───
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(50,50,50,50);
+        card.setPadding(50, 50, 50, 50);
 
-        GradientDrawable cb = new GradientDrawable();
-        cb.setColor(0xFF1E1E1E);
-        cb.setCornerRadius(36);
-        card.setBackground(cb);
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(0xFF1E1E1E);
+        cardBg.setCornerRadius(36);
+        card.setBackground(cardBg);
 
+        // ─── Title ───
         TextView title = new TextView(this);
         title.setText("CITPC CONNECTOR");
         title.setTextColor(Color.WHITE);
+        title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
-        title.setPadding(0,0,0,30);
+        title.setPadding(0, 0, 0, 24);
+        card.addView(title);
 
-        userField = field("Username");
-        passField = field("Password");
+        // ─── Saved user spinner ───
+        TextView savedLabel = new TextView(this);
+        savedLabel.setText("Saved Accounts");
+        savedLabel.setTextColor(0xFF999999);
+        savedLabel.setTextSize(12);
+        savedLabel.setPadding(4, 0, 0, 4);
+        card.addView(savedLabel);
+
+        userSpinner = new Spinner(this);
+        userSpinner.setLayoutParams(makeMarginParams(0, 0, 0, 8));
+        card.addView(userSpinner);
+
+        // ─── Spinner button row ───
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(makeMarginParams(0, 0, 0, 16));
+
+        addBtn = makeSmallButton("+ Add New");
+        deleteBtn = makeSmallButton("Delete");
+        deleteBtn.setBackgroundColor(0xFF993333);
+
+        btnRow.addView(addBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        btnRow.addView(deleteBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        card.addView(btnRow);
+
+        // ─── Username field ───
+        userField = createField("Username");
+        card.addView(userField);
+
+        // ─── Password field + toggle ───
+        passField = createField("Password");
         passField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-
-        loadDefaults();
 
         ImageButton toggle = new ImageButton(this);
         toggle.setImageResource(android.R.drawable.ic_menu_view);
         toggle.setBackgroundColor(Color.TRANSPARENT);
-        toggle.setOnClickListener(v -> togglePass());
+        toggle.setOnClickListener(v -> togglePassword());
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.addView(passField, new LinearLayout.LayoutParams(0,-2,1));
-        row.addView(toggle);
+        LinearLayout passRow = new LinearLayout(this);
+        passRow.setOrientation(LinearLayout.HORIZONTAL);
+        passRow.setLayoutParams(makeMarginParams(0, 0, 0, 22));
+        passRow.addView(passField, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        passRow.addView(toggle);
+        card.addView(passRow);
 
+        // ─── Connect button ───
         Button connect = new Button(this);
         connect.setText("CONNECT");
         connect.setOnClickListener(v -> connect());
+        card.addView(connect);
 
+        // ─── Status ───
         status = new TextView(this);
         status.setTextColor(0xFFBBBBBB);
         status.setGravity(Gravity.CENTER);
-        status.setPadding(0,20,0,0);
-
-        card.addView(title);
-        card.addView(userField);
-        card.addView(row);
-        card.addView(connect);
+        status.setPadding(0, 20, 0, 0);
         card.addView(status);
 
         root.addView(card);
         setContentView(root);
 
-        autoConnect();
+        // ─── Wire up events ───
+        loadUsers();
+        refreshSpinner();
+
+        userSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                String selected = userList.get(pos);
+                userField.setText(selected);
+                SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+                passField.setText(sp.getString("pass_" + selected, ""));
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        addBtn.setOnClickListener(v -> saveCurrentUser());
+        deleteBtn.setOnClickListener(v -> deleteSelectedUser());
+
+        // Auto-connect if launched from WifiService (has extra flag)
+        if (getIntent() != null && getIntent().getBooleanExtra("auto_login", false)) {
+            connect();
+        }
     }
 
-    private EditText field(String h) {
+    // ──────────────────────────────────────────────
+    // UI helpers
+    // ──────────────────────────────────────────────
+
+    private EditText createField(String hint) {
         EditText e = new EditText(this);
-        e.setHint(h);
-        e.setTextColor(Color.WHITE);
+        e.setHint(hint);
         e.setHintTextColor(0xFF777777);
+        e.setTextColor(Color.WHITE);
         e.setSingleLine(true);
-        e.setPadding(30,24,30,24);
+        e.setPadding(30, 24, 30, 24);
 
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(0xFF2A2A2A);
-        g.setCornerRadius(28);
-        e.setBackground(g);
+        GradientDrawable fieldBg = new GradientDrawable();
+        fieldBg.setColor(0xFF2A2A2A);
+        fieldBg.setCornerRadius(28);
+        e.setBackground(fieldBg);
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2);
-        lp.setMargins(0,0,0,22);
-        e.setLayoutParams(lp);
         return e;
     }
 
-    private void togglePass() {
+    private Button makeSmallButton(String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(11);
+        b.setBackgroundColor(0xFF336633);
+        b.setTextColor(Color.WHITE);
+        return b;
+    }
+
+    private LinearLayout.LayoutParams makeMarginParams(int l, int t, int r, int b) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(l, t, r, b);
+        return lp;
+    }
+
+    private void togglePassword() {
         passwordVisible = !passwordVisible;
         passField.setInputType(passwordVisible
                 ? InputType.TYPE_CLASS_TEXT
@@ -132,113 +202,167 @@ public class MainActivity extends Activity {
         passField.setSelection(passField.getText().length());
     }
 
-    private void loadDefaults() {
-        SharedPreferences sp = getSharedPreferences("creds", MODE_PRIVATE);
+    // ──────────────────────────────────────────────
+    // Multi-user management
+    // ──────────────────────────────────────────────
 
-        if (!sp.contains("080bel042")) {
-            sp.edit()
-              .putString("080bel042","mechanical")
-              .putString("rita","rita")
-              .putString("last","080bel042")
-              .apply();
+    private void loadUsers() {
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        Set<String> saved = sp.getStringSet(KEY_USERS, null);
+        if (saved != null) {
+            userList = new ArrayList<>(saved);
+        } else {
+            userList = new ArrayList<>();
         }
-
-        String last = sp.getString("last","080bel042");
-        userField.setText(last);
-        passField.setText(sp.getString(last,""));
     }
 
-    private boolean onTargetWifi() {
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (cm == null) return false;
+    private void refreshSpinner() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, userList);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        userSpinner.setAdapter(adapter);
 
-        Network net = cm.getActiveNetwork();
-        if (net == null) return false;
-
-        NetworkCapabilities cap = cm.getNetworkCapabilities(net);
-        if (cap == null || !cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
-            return false;
-
-        WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
-        WifiInfo info = wm != null ? wm.getConnectionInfo() : null;
-        String ssid = info != null ? info.getSSID() : null;
-
-        if (ssid == null) return false;
-        ssid = ssid.replace("\"",""); // remove quotes Android adds
-        return TARGET_SSID.equals(ssid);
+        // Select last-used user
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        String last = sp.getString(KEY_LAST, null);
+        if (last != null && userList.contains(last)) {
+            userSpinner.setSelection(userList.indexOf(last));
+        }
     }
 
-    private void autoConnect() {
-        if (!onTargetWifi()) {
-            status.setText("⚠ Not on " + TARGET_SSID);
+    private void saveCurrentUser() {
+        String user = userField.getText().toString().trim();
+        String pass = passField.getText().toString();
+
+        if (user.isEmpty()) {
+            status.setText("⚠️ Username is empty");
             return;
         }
-        connect();
+
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+
+        // Add to user set
+        if (!userList.contains(user)) {
+            userList.add(user);
+        }
+
+        sp.edit()
+                .putStringSet(KEY_USERS, new HashSet<>(userList))
+                .putString("pass_" + user, pass)
+                .putString(KEY_LAST, user)
+                .apply();
+
+        refreshSpinner();
+        userSpinner.setSelection(userList.indexOf(user));
+        status.setText("✅ Saved: " + user);
     }
 
+    private void deleteSelectedUser() {
+        if (userList.isEmpty()) {
+            status.setText("⚠️ No account to delete");
+            return;
+        }
+
+        int pos = userSpinner.getSelectedItemPosition();
+        String toDelete = userList.get(pos);
+
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        userList.remove(pos);
+
+        sp.edit()
+                .putStringSet(KEY_USERS, new HashSet<>(userList))
+                .remove("pass_" + toDelete)
+                .apply();
+
+        refreshSpinner();
+
+        if (userList.isEmpty()) {
+            userField.setText("");
+            passField.setText("");
+        }
+        status.setText("🗑️ Deleted: " + toDelete);
+    }
+
+    // ──────────────────────────────────────────────
+    // Login logic
+    // ──────────────────────────────────────────────
+
     private void connect() {
+        String user = userField.getText().toString().trim();
+        String pass = passField.getText().toString();
+
+        if (user.isEmpty()) {
+            status.setText("⚠️ Enter a username");
+            return;
+        }
+
         status.setText("Connecting…");
 
         executor.execute(() -> {
             boolean ok = false;
-
-            for (int i=0;i<MAX_RETRY && !ok;i++) {
-                ok = tryLogin(userField.getText().toString(),
-                              passField.getText().toString());
+            for (int i = 0; i < 3; i++) {
+                ok = tryLogin(user, pass);
+                if (ok) break;
                 sleep(1200);
             }
 
-            saveCred();
-            boolean r = ok;
+            // Only save credential on success
+            if (ok) {
+                saveCredential(user, pass);
+            }
 
-            runOnUiThread(() ->
-                status.setText(r ? "✅ Connected" : "❌ Failed")
-            );
+            boolean result = ok;
+            runOnUiThread(() -> status.setText(result ? "✅ Connected" : "❌ Failed"));
         });
     }
 
-    private boolean tryLogin(String u,String p) {
+    private boolean tryLogin(String u, String p) {
+        HttpURLConnection c = null;
         try {
             URL url = new URL("http://10.100.1.1:8090/login.xml");
-            HttpURLConnection c = (HttpURLConnection) url.openConnection();
-
-            String data =
-                "mode=191&username="+u+
-                "&password="+p+
-                "&a="+System.currentTimeMillis();
-
-            c.setRequestMethod("POST");
+            c = (HttpURLConnection) url.openConnection();
+            c.setConnectTimeout(5000);   // 5s connect timeout
+            c.setReadTimeout(5000);      // 5s read timeout
             c.setDoOutput(true);
+            c.setRequestMethod("POST");
 
+            String data = "mode=191&username=" + u + "&password=" + p + "&a=" + System.currentTimeMillis();
             OutputStream os = c.getOutputStream();
-            os.write(data.getBytes());
+            os.write(data.getBytes("UTF-8"));
+            os.flush();
             os.close();
 
-            BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()));
-            String l;
-            while ((l=br.readLine())!=null)
-                if (l.contains("You are signed in as"))
+            BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"));
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.contains("signed in")) {
+                    br.close();
                     return true;
-        } catch (Exception ignored) {}
+                }
+            }
+            br.close();
+
+        } catch (Exception ignored) {
+            // Network unreachable or timeout — will retry
+        } finally {
+            if (c != null) {
+                c.disconnect();   // Always disconnect
+            }
+        }
         return false;
     }
 
-    private void saveCred() {
-        SharedPreferences sp = getSharedPreferences("creds", MODE_PRIVATE);
+    private void saveCredential(String user, String pass) {
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
         sp.edit()
-          .putString(userField.getText().toString(), passField.getText().toString())
-          .putString("last", userField.getText().toString())
-          .apply();
+                .putString("pass_" + user, pass)
+                .putString(KEY_LAST, user)
+                .apply();
     }
 
-    private void sleep(long m) {
-        try { Thread.sleep(m); } catch(Exception ignored){}
-    }
-
-    @Override
-    protected void onDestroy() {
-        executor.shutdownNow();
-        super.onDestroy();
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ignored) {}
     }
 }
-
