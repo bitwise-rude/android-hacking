@@ -1,5 +1,9 @@
 package com.minimal.app;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -10,6 +14,9 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 
 import java.io.*;
@@ -25,9 +32,12 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
 
     private EditText userField, passField;
-    private TextView status;
+    private TextView status, icon, connectionStatus;
     private Spinner userSpinner;
+    private Button connectBtn;
+    private LinearLayout savedAccountsCard, credentialsCard;
     private boolean passwordVisible = false;
+    private boolean isConnecting = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private List<String> userList = new ArrayList<>();
 
@@ -35,172 +45,382 @@ public class MainActivity extends Activity {
     private static final String KEY_USERS  = "user_list";
     private static final String KEY_LAST   = "last_user";
 
-    // ─── Colors ───
-    private static final int C_BG_TOP      = 0xFF0A0E1A;
-    private static final int C_BG_BOT      = 0xFF1A2240;
-    private static final int C_CARD        = 0xFF141824;
-    private static final int C_CARD_BORDER = 0xFF2A3050;
-    private static final int C_FIELD_BG    = 0xFF1E2336;
-    private static final int C_FIELD_BORDER= 0xFF2E3555;
-    private static final int C_TEXT        = 0xFFE8EAF0;
-    private static final int C_TEXT_DIM    = 0xFF6B7280;
-    private static final int C_ACCENT      = 0xFF4F8CFF;
-    private static final int C_ACCENT_DARK = 0xFF3A6FD8;
-    private static final int C_SUCCESS     = 0xFF34D399;
-    private static final int C_ERROR       = 0xFFF87171;
-    private static final int C_DELETE      = 0xFF4A2030;
-    private static final int C_DELETE_TEXT = 0xFFF87171;
+    // ─── Modern Vibrant Colors ───
+    private static final int C_BG_TOP      = 0xFF6366F1;  // Vibrant indigo
+    private static final int C_BG_BOT      = 0xFF8B5CF6;  // Purple
+    private static final int C_CARD        = 0xFFFFFFFF;  // White cards
+    private static final int C_CARD_SHADOW = 0x40000000;  // Shadow
+    private static final int C_FIELD_BG    = 0xFFF8F9FF;  // Light background
+    private static final int C_FIELD_BORDER= 0xFFE0E7FF;  // Light border
+    private static final int C_TEXT        = 0xFF1E293B;  // Dark text
+    private static final int C_TEXT_DIM    = 0xFF64748B;  // Gray text
+    private static final int C_ACCENT      = 0xFF6366F1;  // Indigo
+    private static final int C_ACCENT_DARK = 0xFF4F46E5;  // Dark indigo
+    private static final int C_SUCCESS     = 0xFF10B981;  // Green
+    private static final int C_ERROR       = 0xFFEF4444;  // Red
+    private static final int C_DELETE      = 0xFFFEE2E2;  // Light red bg
+    private static final int C_DELETE_TEXT = 0xFFDC2626;  // Red text
+    private static final int C_SPINNER_BG  = 0xFF6366F1;  // Vibrant spinner
+    private static final int C_SPINNER_TEXT= 0xFFFFFFFF;  // White text
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // ─── Root ───
+        // ─── Scrollable Root ───
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(24), dp(24), dp(24), dp(24));
-        root.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{C_BG_TOP, C_BG_BOT}));
+        root.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        root.setPadding(dp(20), dp(40), dp(20), dp(40));
+        
+        GradientDrawable rootBg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{C_BG_TOP, C_BG_BOT});
+        root.setBackground(rootBg);
 
-        // ─── Card ───
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(28), dp(32), dp(28), dp(32));
+        // ─── Header Section ───
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setGravity(Gravity.CENTER);
+        header.setPadding(0, dp(20), 0, dp(30));
 
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(C_CARD);
-        cardBg.setCornerRadius(dp(20));
-        cardBg.setStroke(dp(1), C_CARD_BORDER);
-        card.setBackground(cardBg);
-
-        // ─── Icon row (wifi icon text + title) ───
-        TextView icon = new TextView(this);
-        icon.setText("\uD83D\uDCF5");   // wifi emoji
-        icon.setTextSize(32);
+        // Animated WiFi Icon
+        icon = new TextView(this);
+        icon.setText("📶");
+        icon.setTextSize(56);
         icon.setGravity(Gravity.CENTER);
-        icon.setLayoutParams(marginParams(0, 0, 0, dp(4)));
-        card.addView(icon);
+        header.addView(icon);
 
         TextView title = new TextView(this);
-        title.setText("CITPC Auto Login");
-        title.setTextColor(C_TEXT);
-        title.setTextSize(26);
+        title.setText("CITPC WiFi");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(32);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
-        title.setLayoutParams(marginParams(0, 0, 0, dp(2)));
-        card.addView(title);
+        title.setLayoutParams(marginParams(0, dp(12), 0, dp(4)));
+        header.addView(title);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Auto WiFi Login");
-        subtitle.setTextColor(C_TEXT_DIM);
-        subtitle.setTextSize(12);
-        subtitle.setGravity(Gravity.CENTER);
-        subtitle.setLayoutParams(marginParams(0, 0, 0, dp(28)));
-        card.addView(subtitle);
+        connectionStatus = new TextView(this);
+        connectionStatus.setText("Ready to connect");
+        connectionStatus.setTextColor(0xCCFFFFFF);
+        connectionStatus.setTextSize(14);
+        connectionStatus.setGravity(Gravity.CENTER);
+        header.addView(connectionStatus);
 
-        // ─── Accounts section label ───
-        card.addView(sectionLabel("Saved Accounts"));
+        root.addView(header);
 
-        // ─── Spinner ───
-        userSpinner = new Spinner(this, Spinner.MODE_DROPDOWN);
-        userSpinner.setLayoutParams(marginParams(0, dp(6), 0, dp(6)));
-        // Spinner styling via a custom background
+        // ─── Saved Accounts Card ───
+        savedAccountsCard = createModernCard();
+        savedAccountsCard.setLayoutParams(marginParams(0, 0, 0, dp(16)));
+
+        TextView accountsLabel = new TextView(this);
+        accountsLabel.setText("SAVED ACCOUNTS");
+        accountsLabel.setTextColor(C_ACCENT);
+        accountsLabel.setTextSize(11);
+        accountsLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        accountsLabel.setLetterSpacing(0.1f);
+        accountsLabel.setLayoutParams(marginParams(0, 0, 0, dp(12)));
+        savedAccountsCard.addView(accountsLabel);
+
+        // Modern Spinner Container
+        LinearLayout spinnerContainer = new LinearLayout(this);
+        spinnerContainer.setOrientation(LinearLayout.HORIZONTAL);
+        spinnerContainer.setGravity(Gravity.CENTER_VERTICAL);
+        spinnerContainer.setLayoutParams(marginParams(0, 0, 0, dp(12)));
+        
         GradientDrawable spinnerBg = new GradientDrawable();
-        spinnerBg.setColor(C_FIELD_BG);
         spinnerBg.setCornerRadius(dp(12));
-        spinnerBg.setStroke(dp(1), C_FIELD_BORDER);
-        userSpinner.setBackground(spinnerBg);
-        card.addView(userSpinner);
+        spinnerBg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        spinnerBg.setColors(new int[]{0xFF6366F1, 0xFF8B5CF6});
+        spinnerBg.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
+        spinnerContainer.setBackground(spinnerBg);
+        spinnerContainer.setPadding(dp(16), dp(4), dp(16), dp(4));
+        spinnerContainer.setElevation(dp(3));
 
-        // ─── Add / Delete row ───
+        TextView spinnerIcon = new TextView(this);
+        spinnerIcon.setText("👤");
+        spinnerIcon.setTextSize(20);
+        spinnerIcon.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        spinnerContainer.addView(spinnerIcon);
+
+        userSpinner = new Spinner(this, Spinner.MODE_DROPDOWN);
+        userSpinner.setBackgroundColor(Color.TRANSPARENT);
+        userSpinner.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        userSpinner.setLayoutParams(spinnerParams);
+        spinnerContainer.addView(userSpinner);
+
+        savedAccountsCard.addView(spinnerContainer);
+
+        // Action Buttons Row
         LinearLayout btnRow = new LinearLayout(this);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setLayoutParams(marginParams(0, dp(8), 0, dp(24)));
+        btnRow.setLayoutParams(marginParams(0, 0, 0, 0));
 
-        Button addBtn = styledButton("+ Save", C_ACCENT, C_ACCENT_DARK, Color.WHITE);
-        Button deleteBtn = styledButton("Delete", C_DELETE, C_DELETE, C_DELETE_TEXT);
+        Button addBtn = createModernButton("💾 Save Account", C_SUCCESS, Color.WHITE);
+        Button deleteBtn = createModernButton("🗑️ Delete", C_ERROR, Color.WHITE);
 
-        btnRow.addView(addBtn, new LinearLayout.LayoutParams(0, dp(38), 1));
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, dp(44), 1);
+        btnRow.addView(addBtn, btnParams);
+        
         View spacer = new View(this);
-        btnRow.addView(spacer, new LinearLayout.LayoutParams(dp(8), 0));
-        btnRow.addView(deleteBtn, new LinearLayout.LayoutParams(0, dp(38), 1));
-        card.addView(btnRow);
+        LinearLayout.LayoutParams spacerParams = new LinearLayout.LayoutParams(dp(12), 0);
+        btnRow.addView(spacer, spacerParams);
+        
+        btnRow.addView(deleteBtn, btnParams);
+        savedAccountsCard.addView(btnRow);
 
-        // ─── Credentials section label ───
-        card.addView(sectionLabel("Credentials"));
+        root.addView(savedAccountsCard);
 
-        // ─── Username ───
-        userField = styledField("Username");
-        userField.setLayoutParams(marginParams(0, dp(6), 0, dp(12)));
-        card.addView(userField);
+        // ─── Credentials Card ───
+        credentialsCard = createModernCard();
+        credentialsCard.setLayoutParams(marginParams(0, 0, 0, dp(20)));
 
-        // ─── Password + toggle ───
-        passField = styledField("Password");
-        passField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        TextView credsLabel = new TextView(this);
+        credsLabel.setText("LOGIN CREDENTIALS");
+        credsLabel.setTextColor(C_ACCENT);
+        credsLabel.setTextSize(11);
+        credsLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        credsLabel.setLetterSpacing(0.1f);
+        credsLabel.setLayoutParams(marginParams(0, 0, 0, dp(12)));
+        credentialsCard.addView(credsLabel);
 
-        ImageButton toggle = new ImageButton(this);
-        toggle.setImageResource(android.R.drawable.ic_menu_view);
-        toggle.setBackgroundColor(Color.TRANSPARENT);
-        toggle.setColorFilter(C_TEXT_DIM);
-        toggle.setOnClickListener(v -> togglePassword());
+        // Username Field
+        userField = createModernField("👤 Username", false);
+        userField.setLayoutParams(marginParams(0, 0, 0, dp(12)));
+        credentialsCard.addView(userField);
 
-        LinearLayout passRow = new LinearLayout(this);
-        passRow.setOrientation(LinearLayout.HORIZONTAL);
-        passRow.setLayoutParams(marginParams(0, dp(0), 0, dp(28)));
+        // Password Field with Toggle
+        LinearLayout passContainer = createPasswordField();
+        passContainer.setLayoutParams(marginParams(0, 0, 0, 0));
+        credentialsCard.addView(passContainer);
 
-        GradientDrawable passRowBg = new GradientDrawable();
-        passRowBg.setColor(C_FIELD_BG);
-        passRowBg.setCornerRadius(dp(12));
-        passRowBg.setStroke(dp(1), C_FIELD_BORDER);
-        passRow.setBackground(passRowBg);
+        root.addView(credentialsCard);
 
-        // Reset passField background since the row itself is the container now
-        passField.setBackground(null);
-        passField.setPadding(dp(16), dp(14), dp(4), dp(14));
+        // ─── Big Connect Button ───
+        connectBtn = createBigConnectButton();
+        connectBtn.setLayoutParams(marginParams(0, 0, 0, dp(16)));
+        root.addView(connectBtn);
 
-        passRow.addView(passField, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
-        passRow.addView(toggle, new LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.MATCH_PARENT));
-        card.addView(passRow);
+        // ─── Status Card ───
+        LinearLayout statusCard = createModernCard();
+        statusCard.setLayoutParams(marginParams(0, 0, 0, dp(30)));
+        statusCard.setPadding(dp(20), dp(16), dp(20), dp(16));
 
-        // ─── Status ───
         status = new TextView(this);
+        status.setText("Tap connect to login to WiFi");
         status.setTextColor(C_TEXT_DIM);
         status.setTextSize(13);
         status.setGravity(Gravity.CENTER);
-        status.setLayoutParams(marginParams(0, dp(4), 0, 0));
-        card.addView(status);
+        statusCard.addView(status);
 
-        root.addView(card);
-        setContentView(root);
+        root.addView(statusCard);
 
-        // ─── Data + events ───
+        // ─── Footer ───
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.VERTICAL);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, dp(10), 0, 0);
+
+        TextView footerText = new TextView(this);
+        footerText.setText("Made by Meyan with adhikari-droid");
+        footerText.setTextColor(0xCCFFFFFF);
+        footerText.setTextSize(12);
+        footerText.setGravity(Gravity.CENTER);
+        footerText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.ITALIC));
+        footer.addView(footerText);
+
+        TextView versionText = new TextView(this);
+        versionText.setText("v2.0 • Auto Login Enabled");
+        versionText.setTextColor(0x88FFFFFF);
+        versionText.setTextSize(10);
+        versionText.setGravity(Gravity.CENTER);
+        versionText.setLayoutParams(marginParams(0, dp(4), 0, 0));
+        footer.addView(versionText);
+
+        root.addView(footer);
+
+        scrollView.addView(root);
+        setContentView(scrollView);
+
+        // ─── Entrance Animations ───
+        animateEntrance(header, 0);
+        animateEntrance(savedAccountsCard, 100);
+        animateEntrance(credentialsCard, 200);
+        animateEntrance(connectBtn, 300);
+        animateEntrance(statusCard, 400);
+        animateEntrance(footer, 500);
+
+        // ─── Data + Events ───
         loadUsers();
         refreshSpinner();
 
         userSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                if (userList.isEmpty()) return;
                 String selected = userList.get(pos);
                 userField.setText(selected);
                 SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
                 passField.setText(sp.getString("pass_" + selected, ""));
+                pulseView(userField);
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        addBtn.setOnClickListener(v -> saveCurrentUser());
-        deleteBtn.setOnClickListener(v -> deleteSelectedUser());
+        addBtn.setOnClickListener(v -> {
+            animateButtonPress(addBtn);
+            saveCurrentUser();
+        });
+        
+        deleteBtn.setOnClickListener(v -> {
+            animateButtonPress(deleteBtn);
+            deleteSelectedUser();
+        });
 
-        // ─── Auto-connect on app open ───
-        autoConnect();
+        connectBtn.setOnClickListener(v -> {
+            animateButtonPress(connectBtn);
+            manualConnect();
+        });
+
+        // ─── AUTO-CONNECT ON STARTUP ───
+        connectBtn.postDelayed(() -> {
+            if (!userField.getText().toString().trim().isEmpty()) {
+                connectBtn.performClick();
+            }
+        }, 800);
     }
 
     // ──────────────────────────────────────────────
-    // UI builders
+    // Modern UI Components
     // ──────────────────────────────────────────────
+
+    private LinearLayout createModernCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(24), dp(24), dp(24), dp(24));
+        
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(C_CARD);
+        bg.setCornerRadius(dp(20));
+        card.setBackground(bg);
+        card.setElevation(dp(8));
+        
+        return card;
+    }
+
+    private EditText createModernField(String hint, boolean isPassword) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setHintTextColor(C_TEXT_DIM);
+        field.setTextColor(C_TEXT);
+        field.setSingleLine(true);
+        field.setPadding(dp(18), dp(16), dp(18), dp(16));
+        field.setTextSize(15);
+        
+        if (isPassword) {
+            field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        }
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(C_FIELD_BG);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(2), C_FIELD_BORDER);
+        field.setBackground(bg);
+
+        return field;
+    }
+
+    private LinearLayout createPasswordField() {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(Gravity.CENTER_VERTICAL);
+        
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(C_FIELD_BG);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(2), C_FIELD_BORDER);
+        container.setBackground(bg);
+
+        passField = new EditText(this);
+        passField.setHint("🔒 Password");
+        passField.setHintTextColor(C_TEXT_DIM);
+        passField.setTextColor(C_TEXT);
+        passField.setSingleLine(true);
+        passField.setPadding(dp(18), dp(16), dp(4), dp(16));
+        passField.setTextSize(15);
+        passField.setBackground(null);
+        passField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+
+        ImageButton toggle = new ImageButton(this);
+        toggle.setImageResource(android.R.drawable.ic_menu_view);
+        toggle.setBackgroundColor(Color.TRANSPARENT);
+        toggle.setColorFilter(C_ACCENT);
+        toggle.setPadding(dp(12), dp(12), dp(12), dp(12));
+        toggle.setOnClickListener(v -> {
+            passwordVisible = !passwordVisible;
+            passField.setInputType(passwordVisible
+                    ? InputType.TYPE_CLASS_TEXT
+                    : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            passField.setSelection(passField.getText().length());
+            pulseView(toggle);
+        });
+
+        container.addView(passField, new LinearLayout.LayoutParams(0, 
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        container.addView(toggle, new LinearLayout.LayoutParams(
+                dp(48), LinearLayout.LayoutParams.MATCH_PARENT));
+
+        return container;
+    }
+
+    private Button createModernButton(String text, int color, int textColor) {
+        Button btn = new Button(this);
+        btn.setText(text);
+        btn.setTextSize(14);
+        btn.setTextColor(textColor);
+        btn.setTypeface(Typeface.DEFAULT_BOLD);
+        btn.setAllCaps(false);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(12));
+        btn.setBackground(bg);
+        btn.setElevation(dp(4));
+
+        return btn;
+    }
+
+    private Button createBigConnectButton() {
+        Button btn = new Button(this);
+        btn.setText("⚡ Connect to WiFi");
+        btn.setTextSize(18);
+        btn.setTextColor(Color.WHITE);
+        btn.setTypeface(Typeface.DEFAULT_BOLD);
+        btn.setAllCaps(false);
+        btn.setPadding(dp(32), dp(20), dp(32), dp(20));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(16));
+        bg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        bg.setColors(new int[]{0xFF10B981, 0xFF059669});
+        bg.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
+        btn.setBackground(bg);
+        btn.setElevation(dp(12));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btn.setLayoutParams(params);
+
+        return btn;
+    }
 
     private int dp(int val) {
         return (int) (val * getResources().getDisplayMetrics().density);
@@ -214,59 +434,157 @@ public class MainActivity extends Activity {
         return lp;
     }
 
-    private TextView sectionLabel(String text) {
-        TextView tv = new TextView(this);
-        tv.setText(text.toUpperCase());
-        tv.setTextColor(C_ACCENT);
-        tv.setTextSize(10);
-        tv.setTypeface(Typeface.DEFAULT_BOLD);
-        tv.setPadding(dp(2), 0, 0, dp(6));
-        return tv;
+    // ──────────────────────────────────────────────
+    // Premium Animations
+    // ──────────────────────────────────────────────
+
+    private void animateEntrance(View view, long delay) {
+        view.setAlpha(0f);
+        view.setTranslationY(dp(40));
+        view.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setStartDelay(delay)
+                .setDuration(600)
+                .setInterpolator(new AccelerateDecelerateInterpolator())
+                .start();
     }
 
-    private EditText styledField(String hint) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setHintTextColor(C_TEXT_DIM);
-        e.setTextColor(C_TEXT);
-        e.setSingleLine(true);
-        e.setPadding(dp(16), dp(14), dp(16), dp(14));
-        e.setTextSize(14);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(C_FIELD_BG);
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), C_FIELD_BORDER);
-        e.setBackground(bg);
-
-        return e;
+    private void animateButtonPress(View button) {
+        button.animate()
+                .scaleX(0.94f)
+                .scaleY(0.94f)
+                .setDuration(80)
+                .withEndAction(() -> button.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setInterpolator(new OvershootInterpolator())
+                        .setDuration(300)
+                        .start())
+                .start();
     }
 
-    private Button styledButton(String text, int bgColor, int pressColor, int textColor) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(13);
-        b.setTextColor(textColor);
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(bgColor);
-        bg.setCornerRadius(dp(10));
-        b.setBackground(bg);
-
-        return b;
+    private void pulseView(View view) {
+        view.animate()
+                .scaleX(1.05f)
+                .scaleY(1.05f)
+                .setDuration(150)
+                .withEndAction(() -> view.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(150)
+                        .start())
+                .start();
     }
 
-    private void togglePassword() {
-        passwordVisible = !passwordVisible;
-        passField.setInputType(passwordVisible
-                ? InputType.TYPE_CLASS_TEXT
-                : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        passField.setSelection(passField.getText().length());
+    private void animateWifiIcon(boolean connecting) {
+        if (connecting) {
+            ObjectAnimator rotation = ObjectAnimator.ofFloat(icon, "rotation", 0f, 360f);
+            rotation.setDuration(2000);
+            rotation.setRepeatCount(ValueAnimator.INFINITE);
+            rotation.start();
+
+            ObjectAnimator pulse = ObjectAnimator.ofFloat(icon, "scaleX", 1f, 1.15f, 1f);
+            ObjectAnimator pulseY = ObjectAnimator.ofFloat(icon, "scaleY", 1f, 1.15f, 1f);
+            pulse.setDuration(1000);
+            pulseY.setDuration(1000);
+            pulse.setRepeatCount(ValueAnimator.INFINITE);
+            pulseY.setRepeatCount(ValueAnimator.INFINITE);
+            pulse.start();
+            pulseY.start();
+        } else {
+            icon.animate().rotation(0).scaleX(1f).scaleY(1f).setDuration(400).start();
+        }
+    }
+
+    private void animateSuccess() {
+        icon.animate()
+                .scaleX(1.4f)
+                .scaleY(1.4f)
+                .setDuration(200)
+                .withEndAction(() -> icon.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setInterpolator(new OvershootInterpolator(2f))
+                        .setDuration(500)
+                        .start())
+                .start();
+
+        status.setAlpha(0f);
+        status.setScaleX(0.8f);
+        status.setScaleY(0.8f);
+        status.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(400)
+                .start();
+
+        // Flash green on cards
+        flashCard(savedAccountsCard, C_SUCCESS);
+        flashCard(credentialsCard, C_SUCCESS);
+    }
+
+    private void animateError() {
+        ObjectAnimator shake = ObjectAnimator.ofFloat(icon, "translationX", 0, -15, 15, -15, 15, 0);
+        shake.setDuration(500);
+        shake.start();
+
+        status.setAlpha(0f);
+        status.animate().alpha(1f).setDuration(400).start();
+
+        // Flash red on cards
+        flashCard(savedAccountsCard, C_ERROR);
+        flashCard(credentialsCard, C_ERROR);
+    }
+
+    private void flashCard(View card, int color) {
+        int originalColor = C_CARD;
+        ValueAnimator colorAnim = ValueAnimator.ofArgb(originalColor, 
+                Color.argb(30, Color.red(color), Color.green(color), Color.blue(color)), 
+                originalColor);
+        colorAnim.setDuration(600);
+        colorAnim.addUpdateListener(animator -> {
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor((int) animator.getAnimatedValue());
+            bg.setCornerRadius(dp(20));
+            card.setBackground(bg);
+            card.setElevation(dp(8));
+        });
+        colorAnim.start();
+    }
+
+    private void setConnectingState(boolean connecting) {
+        isConnecting = connecting;
+        connectBtn.setEnabled(!connecting);
+        
+        if (connecting) {
+            connectBtn.setText("⏳ Connecting...");
+            connectionStatus.setText("Authenticating...");
+            connectionStatus.setTextColor(0xFFFFFFFF);
+            
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(16));
+            bg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+            bg.setColors(new int[]{0xFF6366F1, 0xFF8B5CF6});
+            bg.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
+            connectBtn.setBackground(bg);
+        } else {
+            connectBtn.setText("⚡ Connect to WiFi");
+            
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(16));
+            bg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+            bg.setColors(new int[]{0xFF10B981, 0xFF059669});
+            bg.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
+            connectBtn.setBackground(bg);
+        }
+        
+        animateWifiIcon(connecting);
     }
 
     // ──────────────────────────────────────────────
-    // Multi-user management
+    // User Management
     // ──────────────────────────────────────────────
 
     private void loadUsers() {
@@ -276,8 +594,25 @@ public class MainActivity extends Activity {
     }
 
     private void refreshSpinner() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, userList);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, userList) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                view.setTextColor(Color.WHITE);
+                view.setTextSize(16);
+                view.setTypeface(Typeface.DEFAULT_BOLD);
+                return view;
+            }
+            @Override
+            public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                view.setTextColor(C_TEXT);
+                view.setTextSize(15);
+                view.setPadding(dp(16), dp(12), dp(16), dp(12));
+                return view;
+            }
+        };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         userSpinner.setAdapter(adapter);
 
@@ -291,7 +626,11 @@ public class MainActivity extends Activity {
     private void saveCurrentUser() {
         String user = userField.getText().toString().trim();
         String pass = passField.getText().toString();
-        if (user.isEmpty()) { setStatus("Username is empty", C_ERROR); return; }
+        if (user.isEmpty()) { 
+            setStatus("⚠️ Username cannot be empty", C_ERROR);
+            animateError();
+            return; 
+        }
 
         if (!userList.contains(user)) userList.add(user);
 
@@ -303,11 +642,16 @@ public class MainActivity extends Activity {
 
         refreshSpinner();
         userSpinner.setSelection(userList.indexOf(user));
-        setStatus("Saved: " + user, C_SUCCESS);
+        setStatus("✅ Account saved: " + user, C_SUCCESS);
+        animateSuccess();
     }
 
     private void deleteSelectedUser() {
-        if (userList.isEmpty()) { setStatus("No account to delete", C_ERROR); return; }
+        if (userList.isEmpty()) { 
+            setStatus("⚠️ No account to delete", C_ERROR);
+            animateError();
+            return; 
+        }
 
         int pos = userSpinner.getSelectedItemPosition();
         String toDelete = userList.get(pos);
@@ -319,24 +663,34 @@ public class MainActivity extends Activity {
                 .apply();
 
         refreshSpinner();
-        if (userList.isEmpty()) { userField.setText(""); passField.setText(""); }
-        setStatus("Deleted: " + toDelete, C_TEXT_DIM);
+        if (userList.isEmpty()) { 
+            userField.setText(""); 
+            passField.setText(""); 
+        }
+        setStatus("🗑️ Deleted: " + toDelete, C_TEXT_DIM);
+        pulseView(savedAccountsCard);
     }
 
     // ──────────────────────────────────────────────
-    // Login
+    // Connection Logic
     // ──────────────────────────────────────────────
 
-    private void autoConnect() {
+    private void manualConnect() {
         String user = userField.getText().toString().trim();
         String pass = passField.getText().toString();
         
-        if (user.isEmpty()) {
-            setStatus("Add an account to auto-login", C_TEXT_DIM);
+        if (user.isEmpty() || pass.isEmpty()) {
+            setStatus("⚠️ Please enter username and password", C_ERROR);
+            animateError();
             return;
         }
 
-        setStatus("Auto-connecting to CITPC WiFi…", C_ACCENT);
+        performConnection(user, pass);
+    }
+
+    private void performConnection(String user, String pass) {
+        setConnectingState(true);
+        setStatus("🔄 Connecting to CITPC WiFi...", C_ACCENT);
 
         executor.execute(() -> {
             boolean ok = false;
@@ -353,10 +707,17 @@ public class MainActivity extends Activity {
             }
             boolean result = ok;
             runOnUiThread(() -> {
+                setConnectingState(false);
                 if (result) {
-                    setStatus("✓ Connected successfully as " + user, C_SUCCESS);
+                    setStatus("✅ Connected successfully as " + user, C_SUCCESS);
+                    connectionStatus.setText("Connected • " + user);
+                    connectionStatus.setTextColor(0xFF10B981);
+                    animateSuccess();
                 } else {
-                    setStatus("✗ Connection failed — verify credentials", C_ERROR);
+                    setStatus("❌ Connection failed — check credentials", C_ERROR);
+                    connectionStatus.setText("Connection failed");
+                    connectionStatus.setTextColor(C_ERROR);
+                    animateError();
                 }
             });
         });
