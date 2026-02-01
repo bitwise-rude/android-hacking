@@ -1,8 +1,13 @@
 package com.minimal.app;
 
+import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.os.Build;
+import android.content.pm.PackageManager;
+import android.provider.Settings;
+import android.content.Intent;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
@@ -66,6 +71,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        startService(new Intent(getBaseContext(), MyService.class));
 
         // ─── Scrollable Root ───
         ScrollView scrollView = new ScrollView(this);
@@ -260,6 +267,26 @@ public class MainActivity extends Activity {
         // ─── Data + Events ───
         loadUsers();
         refreshSpinner();
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+        != PackageManager.PERMISSION_GRANTED) {
+
+    requestPermissions(
+        new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+        100
+    );
+    if (Build.VERSION.SDK_INT >= 23 &&
+    checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        != PackageManager.PERMISSION_GRANTED) {
+
+    requestPermissions(
+        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+        200
+    );
+}
+}
+
 
         userSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
