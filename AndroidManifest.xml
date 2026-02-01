@@ -8,19 +8,9 @@
 
     <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-
-    <!-- Location — required to read SSID on API 29+ -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
-
-    <!-- Boot + alarm -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
-        android:label="Neo_CITPC"
+        android:label="CITPC Login"
         android:usesCleartextTraffic="true">
 
         <!-- Main activity -->
@@ -32,25 +22,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
-        <!-- Alarm-driven WiFi checker — fires every 30s, checks SSID, notifies if CITPC -->
-        <receiver
-            android:name=".WifiCheckReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.minimal.app.WIFI_CHECK"/>
-            </intent-filter>
-        </receiver>
-
-        <!-- Boot receiver — starts the repeating alarm after reboot -->
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.QUICKBOOT_REBOOT"/>
-            </intent-filter>
-        </receiver>
 
     </application>
 </manifest>

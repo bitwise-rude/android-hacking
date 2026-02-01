@@ -27,7 +27,6 @@ public class MainActivity extends Activity {
     private EditText userField, passField;
     private TextView status;
     private Spinner userSpinner;
-    private Button connectBtn;
     private boolean passwordVisible = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private List<String> userList = new ArrayList<>();
@@ -85,7 +84,7 @@ public class MainActivity extends Activity {
         card.addView(icon);
 
         TextView title = new TextView(this);
-        title.setText("CITPC");
+        title.setText("CITPC Auto Login");
         title.setTextColor(C_TEXT);
         title.setTextSize(26);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -165,21 +164,6 @@ public class MainActivity extends Activity {
         passRow.addView(toggle, new LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.MATCH_PARENT));
         card.addView(passRow);
 
-        // ─── Connect button ───
-        connectBtn = new Button(this);
-        connectBtn.setText("CONNECT");
-        connectBtn.setTextSize(15);
-        connectBtn.setTextColor(Color.WHITE);
-        connectBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        connectBtn.setLayoutParams(marginParams(0, 0, 0, dp(20)));
-
-        GradientDrawable connectBg = new GradientDrawable();
-        connectBg.setColor(C_ACCENT);
-        connectBg.setCornerRadius(dp(12));
-        connectBtn.setBackground(connectBg);
-        connectBtn.setOnClickListener(v -> connect());
-        card.addView(connectBtn);
-
         // ─── Status ───
         status = new TextView(this);
         status.setTextColor(C_TEXT_DIM);
@@ -210,13 +194,8 @@ public class MainActivity extends Activity {
         addBtn.setOnClickListener(v -> saveCurrentUser());
         deleteBtn.setOnClickListener(v -> deleteSelectedUser());
 
-        // ─── Start repeating WiFi check alarm (works even when app is dead) ───
-        BootReceiver.startAlarm(this);
-
-        // ─── Auto-connect if launched from WifiService notification tap ───
-        if (getIntent() != null && getIntent().getBooleanExtra("auto_login", false)) {
-            connect();
-        }
+        // ─── Auto-connect on app open ───
+        autoConnect();
     }
 
     // ──────────────────────────────────────────────
@@ -348,13 +327,16 @@ public class MainActivity extends Activity {
     // Login
     // ──────────────────────────────────────────────
 
-    private void connect() {
+    private void autoConnect() {
         String user = userField.getText().toString().trim();
         String pass = passField.getText().toString();
-        if (user.isEmpty()) { setStatus("Enter a username", C_ERROR); return; }
+        
+        if (user.isEmpty()) {
+            setStatus("Add an account to auto-login", C_TEXT_DIM);
+            return;
+        }
 
-        setStatus("Connecting…", C_ACCENT);
-        connectBtn.setEnabled(false);
+        setStatus("Auto-connecting to CITPC WiFi…", C_ACCENT);
 
         executor.execute(() -> {
             boolean ok = false;
@@ -371,11 +353,10 @@ public class MainActivity extends Activity {
             }
             boolean result = ok;
             runOnUiThread(() -> {
-                connectBtn.setEnabled(true);
                 if (result) {
-                    setStatus("Connected successfully", C_SUCCESS);
+                    setStatus("✓ Connected successfully as " + user, C_SUCCESS);
                 } else {
-                    setStatus("Connection failed — check credentials", C_ERROR);
+                    setStatus("✗ Connection failed — verify credentials", C_ERROR);
                 }
             });
         });
