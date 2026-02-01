@@ -11,13 +11,16 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
-    <!-- Location is required to read SSID on API 29+ -->
+    <!-- Location — required to read SSID on API 29+ -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
 
     <!-- Foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+
+    <!-- Boot receiver -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <application
         android:label="Neo_CITPC"
@@ -33,18 +36,28 @@
             </intent-filter>
         </activity>
 
-        <!-- WiFi monitor service (runs in foreground, watches for SSID) -->
+        <!-- WiFi monitor service -->
         <service
             android:name=".WifiService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice"/>
 
-        <!-- Fallback receiver for connectivity changes (mainly pre-API 28) -->
+        <!-- Connectivity change fallback (pre-API 28) -->
         <receiver
             android:name=".WifiReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot receiver — starts WifiService after reboot -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_REBOOT"/>
             </intent-filter>
         </receiver>
 
