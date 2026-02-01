@@ -15,7 +15,7 @@ import android.os.IBinder;
 
 public class WifiService extends Service {
 
-    static final String TARGET_SSID   = "CITPC-WIFI";
+    static final String TARGET_SSID   = "kushal_wnepal";
     static final String CHANNEL_ID    = "citpc_auto";
     static final String CHANNEL_NAME  = "CITPC Auto-Login";
     static final String CHANNEL_ALERT = "citpc_alert";

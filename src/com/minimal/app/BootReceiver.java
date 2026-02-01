@@ -1,9 +1,10 @@
 package com.minimal.app;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 
 public class BootReceiver extends BroadcastReceiver {
 
@@ -12,16 +13,33 @@ public class BootReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         if (action == null) return;
 
-        // Fire on both BOOT_COMPLETED and QUICKBOOT_REBOOT
         if (action.equals("android.intent.action.BOOT_COMPLETED")
          || action.equals("android.intent.action.QUICKBOOT_REBOOT")) {
-
-            Intent svc = new Intent(ctx, WifiService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(svc);
-            } else {
-                ctx.startService(svc);
-            }
+            startAlarm(ctx);
         }
+    }
+
+    /**
+     * Sets a repeating alarm that fires WifiCheckReceiver every 30 seconds.
+     * Safe to call multiple times — setRepeating with the same PendingIntent
+     * just replaces the previous one.
+     */
+    public static void startAlarm(Context ctx) {
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+
+        Intent checkIntent = new Intent(ctx, WifiCheckReceiver.class);
+        checkIntent.setAction("com.minimal.app.WIFI_CHECK");
+
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, 0, checkIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        // Start immediately, then repeat every 30 seconds
+        // 3 = AlarmManager.ELAPSED_REAL_TIME raw value
+        am.setRepeating(
+                3,
+                System.currentTimeMillis(),
+                10 * 1000,
+                pi);
     }
 }

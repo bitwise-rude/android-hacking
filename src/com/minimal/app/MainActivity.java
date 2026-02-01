@@ -210,9 +210,8 @@ public class MainActivity extends Activity {
         addBtn.setOnClickListener(v -> saveCurrentUser());
         deleteBtn.setOnClickListener(v -> deleteSelectedUser());
 
-        // ─── Start background WiFi monitor ───
-        Intent svcIntent = new Intent(this, WifiService.class);
-        startForegroundService(svcIntent);
+        // ─── Start repeating WiFi check alarm (works even when app is dead) ───
+        BootReceiver.startAlarm(this);
 
         // ─── Auto-connect if launched from WifiService notification tap ───
         if (getIntent() != null && getIntent().getBooleanExtra("auto_login", false)) {
